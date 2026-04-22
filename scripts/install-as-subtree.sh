@@ -104,22 +104,67 @@ link_commands() {
 echo ">>> Linking slash-commands into .claude/commands/$NAMESPACE/ ..."
 link_commands "$PREFIX" "$NAMESPACE"
 
+# --- Register the subtree as a plugin in .claude/settings.json ---
+register_plugin() {
+  local prefix="$1"
+  local settings=".claude/settings.json"
+  local plugin_path="./$prefix"
+
+  if ! command -v jq &>/dev/null; then
+    echo "   ! jq not found — skipping settings.json auto-registration"
+    echo "     Register manually: add \"$plugin_path\" to .plugins in $settings"
+    return
+  fi
+
+  mkdir -p "$(dirname "$settings")"
+
+  if [[ ! -f "$settings" ]]; then
+    echo "   + Creating $settings"
+    echo "{}" > "$settings"
+  fi
+
+  if ! jq -e . "$settings" &>/dev/null; then
+    echo "   ! $settings has invalid JSON — skipping auto-registration"
+    echo "     Fix the file and add \"$plugin_path\" to .plugins manually"
+    return
+  fi
+
+  if jq -e --arg p "$plugin_path" '.plugins // [] | index($p)' "$settings" &>/dev/null; then
+    echo "   ✓ Plugin already registered in $settings"
+    return
+  fi
+
+  # Add plugin_path to .plugins (create array if missing)
+  local tmp
+  tmp=$(mktemp)
+  jq --arg p "$plugin_path" '.plugins = ((.plugins // []) + [$p])' "$settings" > "$tmp"
+  mv "$tmp" "$settings"
+  echo "   + Registered \"$plugin_path\" in $settings"
+}
+
+echo ">>> Registering plugin in .claude/settings.json ..."
+register_plugin "$PREFIX"
+
 cat <<EOF
 
 ================================================================
 Installed sagos95/ai-hub as subtree at: $PREFIX
 Slash-commands linked under .claude/commands/$NAMESPACE/
+Plugin registered in .claude/settings.json
 
-Next steps:
-  1. Register plugin in .claude/settings.json:
-       { "plugins": ["./$PREFIX", "."] }
-  2. (Optional) Add a Makefile target for future updates:
+You're ready — start Claude Code in this repo and all /$NAMESPACE:* commands
+will be available.
+
+Optional:
+  * Add a Makefile target for future updates:
        update-ai-hub:
        	git subtree pull --prefix=$PREFIX $REMOTE_NAME $BRANCH --squash
        	@./$PREFIX/scripts/relink-commands.sh $PREFIX $NAMESPACE 2>/dev/null || true
-  3. Update anytime via:
-       /ai-hub:update-ai-hub         (after plugin registration)
-       make update-ai-hub            (if Makefile target added)
-       curl -sL https://raw.githubusercontent.com/sagos95/ai-hub/main/scripts/update-from-ai-hub.sh | bash
+
+Update anytime via:
+  /ai-hub:update-ai-hub                         (natural language also works:
+                                                 "обнови sagos95 инструменты")
+  make update-ai-hub                            (if Makefile target added)
+  ./$PREFIX/scripts/update-from-ai-hub.sh
 ================================================================
 EOF

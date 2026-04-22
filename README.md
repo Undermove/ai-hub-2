@@ -150,10 +150,23 @@ Generic-интеграции получают обновления из ai-hub, 
 curl -sL https://raw.githubusercontent.com/sagos95/ai-hub/main/scripts/install-as-subtree.sh | bash
 ```
 
-Это добавит remote `ai-hub`, сделает `git subtree add --prefix=integrations/sagos95-ai-hub` и подскажет, как зарегистрировать плагин в `.claude/settings.json`. Свой prefix можно передать аргументом:
+Скрипт делает всё сам:
+1. Добавляет remote `ai-hub` и фетчит
+2. `git subtree add --prefix=integrations/sagos95-ai-hub ai-hub main --squash`
+3. Создаёт симлинки для всех slash-команд в `.claude/commands/ai-hub/`
+4. Регистрирует плагин в `.claude/settings.json` (через `jq`, идемпотентно)
+
+После этого команды `/ai-hub:*` доступны сразу — запускай Claude Code и пользуйся. Никаких ручных шагов.
+
+Свой prefix можно передать аргументом:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/sagos95/ai-hub/main/scripts/install-as-subtree.sh | bash -s integrations/ai-hub
+```
+
+Другой namespace (например, чтобы команды стали `/my-hub:*`):
+```bash
+AI_HUB_NAMESPACE=my-hub curl -sL ... | bash
 ```
 
 ### Обновление subtree
