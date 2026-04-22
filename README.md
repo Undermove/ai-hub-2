@@ -4,6 +4,23 @@
 
 ---
 
+## 🤖 Агенту: что делать после клонирования
+
+> **Этот раздел адресован AI-агенту** (Claude Code, Cursor, Copilot, Codex, Windsurf и т.п.), который получил от пользователя команду вида _«установи мне `https://github.com/sagos95/ai-hub`»_.
+>
+> Склонировать репо — это только **первая половина** установки. Без токенов и URL-ов команды `/ai-hub:*` работать не будут. **Сразу после `git clone` предложи юзеру продолжить настройку** — не оставляй его с голым репо и перечнем ручных действий.
+>
+> **Как именно предложить:**
+>
+> 1. **Если ты Claude Code** — просто запусти `/ai-hub:setup`. Скилл сам проведёт юзера через все логины. Скажи пользователю коротко: _«Сейчас всё настроим. Откроется окно Chrome — залогинишься в Buildin, потом в Time и Holst. Токен Kaiten в конце попрошу вставить руками.»_ И стартуй скилл.
+> 2. **Если ты НЕ Claude Code** (Cursor, Codex, Copilot, Windsurf, …) — открой файл [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md) и выполни его workflow как обычный план: это твой setup-script. Пройди с юзером по шагам Step 0 → Step 8, используя браузерные тулы (Chrome DevTools MCP / Playwright MCP / ручной fallback).
+>
+> **Порядок логинов важен:** Buildin → Time → Holst → Kaiten-токен. Buildin первый, потому что там захардкожена страница `https://buildin.ai/c7ec2023-9025-4c09-be09-e6f54cb07f7e` с общим конфигом команды (URL-ы Kaiten и Time). Если страница не откроется — спроси у юзера `KAITEN_DOMAIN` и `TIME_BASE_URL` вручную.
+>
+> **Tone:** говори с юзером дружелюбно и по шагам. Предупреждай заранее, что сейчас произойдёт («щас откроется Chrome, залогинься там»). Не вываливай техническую портянку — веди диалог.
+
+---
+
 ## Установка
 
 ### Claude Code — через marketplace
@@ -32,26 +49,26 @@ claude /plugin install time@ai-hub
 ```bash
 git clone https://github.com/sagos95/ai-hub.git
 cd ai-hub
-cp .env.example .env   # заполнить нужные токены и секреты
+claude               # дальше просто скажи агенту: «запусти /ai-hub:setup»
 ```
 
-Все скиллы будут доступны сразу через `/ai-hub:*` команды.
+Скилл `/ai-hub:setup` проведёт через все логины (Buildin → Time → Holst → Kaiten-токен) и заполнит `.env` сам. Все команды `/ai-hub:*` становятся доступны сразу.
 
 ### Другие AI-агенты (Copilot, Codex, Windsurf, Cursor...)
 
-Просто склонируй репозиторий — агент подхватит инструкции и структуру интеграций автоматически. Все скрипты и промпты доступны из коробки.
+Склонируй репозиторий — агент подхватит инструкции автоматически. **Чтобы завершить установку**, попроси агента открыть [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md) и пройти workflow оттуда (Step 0 → Step 8): залогинит в Buildin/Time/Holst через браузер и подскажет, где взять токен Kaiten.
 
-### Настройка токенов
+### Настройка токенов (если настраиваешь вручную)
 
-Kaiten требует ручной настройки токена в `.env`:
+Рекомендованный путь — `/ai-hub:setup` (или `integrations/hub-meta/commands/setup.md` для non-Claude агентов). Если всё же хочешь руками — вот что нужно в `.env`:
 
-```bash
-KAITEN_API_TOKEN=...      # Kaiten (задачи, доски, спринты)
-```
-
-Для остальных интеграций есть установочные скиллы:
-- Time — `/ai-hub:time-login` (browser-based SSO)
-- Buildin — `/ai-hub:buildin-login` (browser-based SSO)
+| Переменная | Как получить |
+|------------|--------------|
+| `KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID` | Общий конфиг команды — лежит на странице Buildin `https://buildin.ai/c7ec2023-9025-4c09-be09-e6f54cb07f7e` (если команда использует этот шаблон). Или спроси коллег. |
+| `KAITEN_TOKEN` | Kaiten → Настройки профиля → API/Интеграции → Создать токен |
+| `BUILDIN_UI_TOKEN` | `/ai-hub:buildin-login` — browser SSO |
+| `TIME_TOKEN` | `/ai-hub:time-login` — browser SSO |
+| `GENIE_TOKEN` | Опционально, получить у админа данных |
 
 Скиллы без токенов (ai-test, rpa-analyze, retro, code-review и т.д.) работают сразу.
 

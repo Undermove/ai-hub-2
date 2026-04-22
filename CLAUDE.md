@@ -2,6 +2,21 @@
 
 AI Hub — набор интеграций и скиллов для Claude Code, подключающих агента к командным инструментам (таск-трекеры, мессенджеры, вики, графические доски, аналитика). Основной язык — русский.
 
+## First run — проверь готовность окружения
+
+**Если юзер только что склонировал репо** (или если ты первым же сообщением видишь запрос вроде «установи мне ai-hub», «настрой», «запусти») — **сразу предложи `/ai-hub:setup`**, не жди дополнительных команд.
+
+Быстрый детектор первого запуска:
+
+```bash
+bash integrations/hub-meta/scripts/env-manager.sh check 2>/dev/null | grep -q '=missing' \
+  && echo NEEDS_SETUP || echo READY
+```
+
+Если `NEEDS_SETUP` — скажи юзеру: _«Вижу, окружение ещё не настроено. Щас всё подключим — откроется Chrome, залогинишься в Buildin/Time/Holst, в конце попрошу токен Kaiten. Поехали?»_ и запусти `/ai-hub:setup`.
+
+Полный сценарий setup — в [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md). Там захардкожен URL страницы общего конфига команды: `https://buildin.ai/c7ec2023-9025-4c09-be09-e6f54cb07f7e` (берётся после логина в Buildin, отдаёт `KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID`; если страница недоступна — setup переходит в ручной режим).
+
 ## Architecture
 
 Модульная архитектура: каждая интеграция — самодостаточный модуль (scripts/, commands/, skills/, agents/). Детали — в README каждого модуля.
