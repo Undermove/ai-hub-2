@@ -55,9 +55,12 @@ claude /plugin install time@ai-hub
 git clone https://github.com/sagos95/ai-hub.git
 cd ai-hub
 bash integrations/hub-meta/scripts/setup.sh next
+# или: npm run setup
 ```
 
 Скажи своему агенту: _«крути этот скрипт, пока не получишь STATUS: DONE»_ — он проведёт через установку MCP, логины в Buildin/Time/Holst и вставку Kaiten-токена. Команды `/ai-hub:*` станут доступны автоматически.
+
+> `package.json` здесь не делает репу Node-проектом — это тонкий обёрточный файл, чтобы агенты, по привычке запускающие `npm run setup` после клона, автоматически триггерили правильный workflow. Никаких npm-зависимостей нет.
 
 ### Настройка токенов (если настраиваешь вручную)
 
