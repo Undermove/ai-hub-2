@@ -4,20 +4,25 @@
 
 ---
 
-## 🤖 Агенту: что делать после клонирования
+## 🤖 Инструкция AI-агенту (любому — Claude Code, Codex, Cursor, Copilot, Windsurf…)
 
-> **Этот раздел адресован AI-агенту** (Claude Code, Cursor, Copilot, Codex, Windsurf и т.п.), который получил от пользователя команду вида _«установи мне `https://github.com/sagos95/ai-hub`»_.
->
-> Склонировать репо — это только **первая половина** установки. Без токенов и URL-ов команды `/ai-hub:*` работать не будут. **Сразу после `git clone` предложи юзеру продолжить настройку** — не оставляй его с голым репо и перечнем ручных действий.
->
-> **Как именно предложить:**
->
-> 1. **Если ты Claude Code** — просто запусти `/ai-hub:setup`. Скилл сам проведёт юзера через все логины. Скажи пользователю коротко: _«Сейчас всё настроим. Откроется окно Chrome — залогинишься в Buildin, потом в Time и Holst. Токен Kaiten в конце попрошу вставить руками.»_ И стартуй скилл.
-> 2. **Если ты НЕ Claude Code** (Cursor, Codex, Copilot, Windsurf, …) — открой файл [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md) и выполни его workflow как обычный план: это твой setup-script. Пройди с юзером по шагам Step 0 → Step 8, используя браузерные тулы (Chrome DevTools MCP / Playwright MCP / ручной fallback).
->
-> **Порядок логинов важен:** Buildin → Time → Holst → Kaiten-токен. Buildin первый. Если после логина Buildin страница не откроется — спроси у юзера `KAITEN_DOMAIN` и `TIME_BASE_URL` вручную.
->
-> **Tone:** говори с юзером дружелюбно и по шагам. Предупреждай заранее, что сейчас произойдёт («щас откроется Chrome, залогинься там»). Не вываливай техническую портянку — веди диалог.
+Пользователь сказал _«установи мне этот репозиторий»_? Клонирование — только половина работы. **Сразу после `git clone` запусти setup-диспетчер и крути его в цикле, пока не получишь `STATUS: DONE`.**
+
+```bash
+bash integrations/hub-meta/scripts/setup.sh next
+```
+
+Этот скрипт печатает ОДИН текущий шаг с точными командами. Выполни их — вызови `next` ещё раз — получи следующий шаг. И так до `STATUS: DONE`.
+
+### Hard rules
+
+1. **НЕ докладывай «установка завершена» пока первая строка вывода не `STATUS: DONE`**. Статус определяется скриптом, не твоим ощущением.
+2. **Chrome DevTools MCP — ОБЯЗАТЕЛЕН. Установи его автоматически, не спрашивай юзера.** Команда установки напечатана на Step 1. Без MCP браузерные логины придётся делать вручную — это антипаттерн.
+3. **Default-сценарий: юзер только нажимает Google SSO в браузере.** Любые «попроси юзера открыть DevTools и что-то скопировать» — manual fallback, используй только если MCP недоступен и нет другого способа.
+4. **Порядок шагов фиксированный** (ими управляет сам скрипт): миграция → MCP → Buildin login → конфиг-страница команды → Time login → Holst → Kaiten token → team-config.
+5. **Secrets не светятся в чат.** Скрипт использует `env-manager.sh set KEY VALUE` — токен идёт прямо в `.env`, в контекст LLM не попадает.
+
+Полный длинный reference (если что-то непонятно) — [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md). Но дефолтный путь — просто крутить `setup.sh next`.
 
 ---
 
@@ -44,19 +49,15 @@ claude /plugin install time@ai-hub
 
 Доступные плагины marketplace: `buildin`, `code-review`, `discovery`, `genie`, `holst`, `hub-meta`, `kaiten`, `reverse-product-analysis`, `spike`, `test-factory`, `time`.
 
-### Claude Code — через git clone
+### Через git clone + setup (любой AI-агент)
 
 ```bash
 git clone https://github.com/sagos95/ai-hub.git
 cd ai-hub
-claude               # дальше просто скажи агенту: «запусти /ai-hub:setup»
+bash integrations/hub-meta/scripts/setup.sh next
 ```
 
-Скилл `/ai-hub:setup` проведёт через все логины (Buildin → Time → Holst → Kaiten-токен) и заполнит `.env` сам. Все команды `/ai-hub:*` становятся доступны сразу.
-
-### Другие AI-агенты (Copilot, Codex, Windsurf, Cursor...)
-
-Склонируй репозиторий — агент подхватит инструкции автоматически. **Чтобы завершить установку**, попроси агента открыть [`integrations/hub-meta/commands/setup.md`](integrations/hub-meta/commands/setup.md) и пройти workflow оттуда (Step 0 → Step 8): залогинит в Buildin/Time/Holst через браузер и подскажет, где взять токен Kaiten.
+Скажи своему агенту: _«крути этот скрипт, пока не получишь STATUS: DONE»_ — он проведёт через установку MCP, логины в Buildin/Time/Holst и вставку Kaiten-токена. Команды `/ai-hub:*` станут доступны автоматически.
 
 ### Настройка токенов (если настраиваешь вручную)
 

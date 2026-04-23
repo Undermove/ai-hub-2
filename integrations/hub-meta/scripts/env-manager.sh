@@ -109,6 +109,37 @@ cmd_has() {
     fi
 }
 
+# Non-secret whitelist: only these keys are safe to print.
+# Tokens and anything sensitive must NEVER be printed.
+NONSECRET_WHITELIST=(KAITEN_DOMAIN TIME_BASE_URL BUILDIN_SPACE_ID GENIE_HOST GENIE_SPACE_ID)
+
+cmd_get() {
+    local key="$1"
+
+    if [[ -z "$key" ]]; then
+        echo "Usage: env-manager.sh get KEY (non-secret only)" >&2
+        exit 1
+    fi
+
+    local allowed=0
+    for whitelisted in "${NONSECRET_WHITELIST[@]}"; do
+        [[ "$key" == "$whitelisted" ]] && allowed=1 && break
+    done
+
+    if [[ "$allowed" -eq 0 ]]; then
+        echo "error:refused key '$key' is not in non-secret whitelist" >&2
+        exit 2
+    fi
+
+    load_env
+    local val="${!key}"
+    if [[ -n "$val" && "$val" != your_* && "$val" != your-* && "$val" != YOUR_* ]]; then
+        echo "$val"
+    else
+        exit 1
+    fi
+}
+
 cmd_migrate() {
     if [[ -f "$ENV_LOCAL_FILE" && ! -f "$ENV_FILE" ]]; then
         mv "$ENV_LOCAL_FILE" "$ENV_FILE"
@@ -129,14 +160,16 @@ case "$COMMAND" in
     check)   cmd_check ;;
     set)     cmd_set "$1" "$2" ;;
     has)     cmd_has "$1" ;;
+    get)     cmd_get "$1" ;;
     migrate) cmd_migrate ;;
     help|*)
-        echo "env-manager.sh — safe .env management (never outputs values)"
+        echo "env-manager.sh — safe .env management (never outputs secrets)"
         echo ""
         echo "Commands:"
         echo "  check              — report set/missing status for all known vars"
         echo "  set KEY VALUE      — add or update a key in .env"
         echo "  has KEY            — exit 0 if set, 1 if missing"
+        echo "  get KEY            — print value (non-secret whitelist only)"
         echo "  migrate            — rename .env.local -> .env if applicable"
         ;;
 esac

@@ -5,256 +5,257 @@ argument-hint: "[buildin_config_page_url]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion", "mcp"]
 ---
 
-# AI Hub Setup — первичная настройка окружения
+# AI Hub Setup
 
-Пошаговый мастер: залогинит в Buildin / Time / Holst через браузер и поможет вставить токен из Kaiten. Агент ведёт диалог — юзер только подтверждает шаги и копирует токен из Kaiten.
+**Primary path:** `bash integrations/hub-meta/scripts/setup.sh next` — этот скрипт в цикле печатает ТЕКУЩИЙ шаг с точными командами. Крути до `STATUS: DONE`. Большинству агентов этого достаточно — дальше можно не читать.
 
-## Константы
+Этот файл — длинная reference-документация на те же шаги (если агент хочет понять "зачем"). Читай сверху вниз и выполняй. Не суммаризируй, не пропускай, не останавливайся раньше времени.
+
+## Hard rules (инварианты)
+
+1. **НЕ останавливайся на `git clone`**. Клон — только половина установки. Если ты только что склонировал репо и пришёл сюда — сразу начинай Step 0.
+2. **НЕ сообщай "установка завершена", пока все mandatory переменные `.env` не `=set`**. Финальный статус определяется выводом `env-manager.sh check`, а не твоим ощущением.
+3. **Отсутствие браузерного MCP — НЕ блокер**. У КАЖДОГО login-шага ниже есть **manual fallback**: юзер сам открывает браузер, копирует токен из DevTools Console, присылает тебе текстом. Никакой MCP для этого не нужен.
+4. **Порядок шагов важен.** Buildin первый, потому что там лежит конфиг-страница с `KAITEN_DOMAIN` и `TIME_BASE_URL`. Не меняй порядок.
+5. **Если любой шаг не удался** — переходи к его manual fallback, не просто пропускай.
+
+## Constants
 
 ```
-ENV_MANAGER           = integrations/hub-meta/scripts/env-manager.sh
-BUILDIN_LOGIN_SCRIPT  = integrations/buildin/scripts/buildin-login.sh
-BUILDIN_PAGES_SCRIPT  = integrations/buildin/scripts/buildin-pages.sh
-TIME_LOGIN_SCRIPT     = integrations/time/scripts/time-login.sh
-DEFAULT_CONFIG_PAGE   = https://buildin.ai/c7ec2023-9025-4c09-be09-e6f54cb07f7e
+ENV_MANAGER         = integrations/hub-meta/scripts/env-manager.sh
+BUILDIN_LOGIN       = integrations/buildin/scripts/buildin-login.sh
+BUILDIN_PAGES       = integrations/buildin/scripts/buildin-pages.sh
+TIME_LOGIN          = integrations/time/scripts/time-login.sh
+DEFAULT_CONFIG_PAGE = https://buildin.ai/c7ec2023-9025-4c09-be09-e6f54cb07f7e
 ```
 
-`DEFAULT_CONFIG_PAGE` захардкожен намеренно: после логина в Buildin эта страница отдаёт
-`KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID` и т.п. Если URL-аргумент передан — он
-перекрывает дефолт.
+## Checklist
 
-## Tone
+Отмечай выполненные шаги в голове. Не докладывай успех, пока не дошёл до Step 8.
 
-**Говори с юзером дружелюбно, по-русски, от первого лица.** Каждый шаг — одна-две фразы:
-«щас откроется Chrome, залогинься через Google SSO и скажи "готово"». Никакого сухого
-технического тона. Юзер не должен гадать, что произойдёт дальше — всегда предупреждай
-заранее («сейчас открою …», «дальше попрошу токен …»).
+- [ ] Step 0 — миграция `.env.local`
+- [ ] Step 1 — проверка текущего состояния
+- [ ] Step 2 — логин в Buildin (MCP **или** manual)
+- [ ] Step 3 — чтение конфиг-страницы → `KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID` (fallback: спросить юзера напрямую)
+- [ ] Step 4 — логин в Time (MCP **или** manual)
+- [ ] Step 5 — логин в Holst (MCP-only, пропускается без MCP)
+- [ ] Step 6 — токен Kaiten (всегда manual)
+- [ ] Step 7 — `team-config.json`
+- [ ] Step 8 — финальная проверка
 
-## Workflow
-
-### Step 0: Приветствие + миграция
-
-Скажи юзеру коротко и бодро:
-
-> «Сейчас настроим AI Hub. Пройдём 4 шага: логин в Buildin → автоподтянем общий конфиг
-> (URL-ы Kaiten и Time) → логин в Time → логин в Holst → токен Kaiten. Минут 5, всё через
-> браузер кроме Kaiten-токена — его надо будет разово скопировать из UI. Поехали?»
-
-Если юзер отказался — остановись. Иначе — мигрируй старый `.env.local` (если есть):
+## Step 0 — миграция
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh migrate
 ```
 
-- `migrated:*` → скажи «переименовал `.env.local` → `.env`».
-- `warning:*` → предупреди, что лежат оба файла, и попроси объединить вручную.
+- `migrated:*` → предупреди юзера «переименовал `.env.local` → `.env`».
+- `warning:both exist` → попроси объединить вручную, **продолжай**.
 - `ok:nothing to migrate` → молчи.
 
-### Step 0.5: Проверь браузерный MCP
-
-Многие шаги требуют браузерный MCP (Chrome DevTools MCP или Playwright MCP). Проверь
-доступность **Chrome DevTools MCP**.
-
-**Если MCP нет,** скажи юзеру:
-> «Нужен браузерный MCP, чтобы я мог открыть окно Chrome и обеспечить логин в разных системах.
-> Сейчас я установлю необходимый Chrome DevTools MCP.»
-
-Установи MCP автоматически. Если юзер отказался — предупреди: «Без MCP придётся
-вручную копировать токены из DevTools Console. Если передумаешь — просто запусти
-`/ai-hub:buildin-login` позже, он сам предложит поставить MCP».
-
-### Step 1: Проверь что уже настроено
+## Step 1 — проверка состояния
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh check
 ```
 
-- Если все обязательные `=set` → скажи: «Всё уже настроено! Проверю токены…» и перейди
-  к Step 6 (проверить валидность токенов).
-- Иначе — кратко перечисли что `missing` (по названиям ключей) и переходи к Step 2.
+Если ВСЕ mandatory (`KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID`, `KAITEN_TOKEN`, `BUILDIN_UI_TOKEN`, `TIME_TOKEN`) `=set` → **прыгай на Step 7**.
 
-### Step 2: Логин в Buildin (первый — там лежит общий конфиг)
+Иначе — продолжай по порядку.
 
-Скажи юзеру:
-> «Сначала Buildin: там на специальной странице лежит общий конфиг команды (URL-ы Kaiten
-> и Time). Щас открою Chrome на странице логина — залогинься через Google SSO, а я автоматом
-> достану токен (в контекст LLM он не попадёт). Скажи "готово", когда залогинишься.»
+## Step 2 — Buildin login
 
-Выполни:
+### 2a. Быстрый check
 
 ```bash
 bash integrations/buildin/scripts/buildin-login.sh check
 ```
 
-- `ok Name (email)` → уже залогинен. Скажи: «О, ты уже залогинен как *Name*, пропускаю.»
-- `error:*` → запусти `/ai-hub:buildin-login` (он сам разберётся с MCP и сохранит токен).
+- `ok Name (email)` → токен валиден, **пропусти к Step 3**.
+- `error:*` → нужен логин, переходи к 2b.
 
-После успешного логина → Step 3.
+### 2b. Есть браузерный MCP?
 
-### Step 3: Автоподтягивание конфига из Buildin
+Попробуй Chrome DevTools MCP (`list_pages`) или Playwright MCP (`browser_snapshot`).
 
-Скажи:
-> «Читаю страницу с конфигом команды…»
+- **MCP отвечает** — выполни workflow из `integrations/buildin/commands/buildin-login.md` (открой `https://buildin.ai/login`, дождись SSO, извлеки cookie `next_auth` через `evaluate_script` в clipboard, запусти `bash integrations/buildin/scripts/buildin-login.sh clipboard`). Токен в контекст LLM не попадает.
+- **MCP нет** — переходи к 2c (manual fallback).
 
-Определи URL конфиг-страницы:
+### 2c. Manual fallback (никакого MCP не нужно)
 
-1. Если `$ARGUMENTS` непустой — используй его.
-2. Иначе — используй `DEFAULT_CONFIG_PAGE`.
+Дай юзеру ровно эту инструкцию (можешь парафразировать, но сохрани шаги):
 
-Извлеки `page_id` (последний UUID в URL):
+> 1. Открой в браузере `https://buildin.ai` и залогинься через Google SSO.
+> 2. Нажми `F12` → вкладка **Console**.
+> 3. Вставь и выполни: `document.cookie.match(/next_auth=([^;]+)/)?.[1]`
+> 4. Скопируй результат (это JWT) и пришли мне сюда.
+
+Когда юзер пришлёт токен:
+
+```bash
+bash integrations/buildin/scripts/buildin-login.sh save "<token>"
+```
+
+- `ok Name (email)` → логин ОК, переходи к Step 3.
+- `error:*` → попроси юзера повторить (возможно, скопировал не тот cookie).
+
+## Step 3 — чтение конфиг-страницы
+
+### 3a. Если Buildin login прошёл — попробуй автоподтяжку
+
+Определи `page_id`: последний UUID из `$ARGUMENTS` (если юзер передал URL), иначе из `DEFAULT_CONFIG_PAGE`.
 
 ```bash
 bash integrations/buildin/scripts/buildin-pages.sh read "<page_id>"
 ```
 
-Разбери вывод: найди все строки формата `KEY=VALUE`, где KEY — `[A-Z_]+`, VALUE —
-непустое. Для каждой пары:
+Из вывода извлеки все строки `[A-Z_]+=<непустое>`. Для каждой:
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh set "<KEY>" "<VALUE>"
 ```
 
-Покажи юзеру только список записанных **ключей** (значения не выводи):
-> «Подтянул: `KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID`.»
+Покажи юзеру только ключи (не значения): «Подтянул: `KAITEN_DOMAIN`, `TIME_BASE_URL`, `BUILDIN_SPACE_ID`». Дальше Step 4.
 
-**Если страница не открылась (404/403) или в ней нет `KEY=VALUE`:**
+### 3b. Manual fallback (Buildin недоступен / страница 404 / Step 2 пропущен)
 
-Извинись и перейди в ручной режим — спроси у юзера через `AskUserQuestion`:
+**Не пропускай этот шаг** — без `KAITEN_DOMAIN` и `TIME_BASE_URL` остальные скиллы не работают.
 
-- `KAITEN_DOMAIN` — например, `yourcompany.kaiten.ru` (без https://)
-- `TIME_BASE_URL` — полный URL Time/Mattermost, например, `https://time.yourcompany.io`
-- `BUILDIN_SPACE_ID` — ID пространства Buildin (можно пропустить)
+Спроси юзера напрямую (через `AskUserQuestion`, если есть; иначе просто текстом):
 
-Сохрани каждое через `env-manager.sh set`. Если юзер не знает какой-то URL — попроси
-открыть соответствующий сервис в браузере и скопировать из адресной строки.
+- **`KAITEN_DOMAIN`** — домен Kaiten без схемы. Пример: `yourcompany.kaiten.ru`.
+- **`TIME_BASE_URL`** — полный URL Time/Mattermost. Пример: `https://time.yourcompany.io`.
+- **`BUILDIN_SPACE_ID`** — ID пространства Buildin (опционально, можно пустое).
 
-### Step 4: Логин в Time
+Если юзер не знает — попроси открыть соответствующий сервис в браузере и скопировать из адресной строки.
 
-Скажи:
-> «Теперь Time. Откроется вкладка Chrome — залогинься через Google SSO. Дальше мне надо
-> будет забрать cookie `MMAUTHTOKEN` из DevTools, я подскажу как.»
+Сохрани каждое:
 
-Запусти:
+```bash
+bash integrations/hub-meta/scripts/env-manager.sh set KAITEN_DOMAIN "<value>"
+bash integrations/hub-meta/scripts/env-manager.sh set TIME_BASE_URL "<value>"
+bash integrations/hub-meta/scripts/env-manager.sh set BUILDIN_SPACE_ID "<value>"   # опционально
+```
+
+## Step 4 — Time login
+
+### 4a. Быстрый check
 
 ```bash
 bash integrations/time/scripts/time-login.sh check
 ```
 
-- `ok @user (email)` → уже залогинен, скажи и пропусти.
-- `error:*` → запусти `/ai-hub:time-login` (он откроет Time и проведёт по шагам).
+- `ok @user (email)` → пропусти к Step 5.
+- `error:*` → продолжай.
 
-### Step 5: Логин в Holst (опционально)
+### 4b. Есть браузерный MCP?
 
-Holst не хранит токен отдельно — он использует сессию браузера в том же Chrome MCP.
-Чтобы `/ai-hub:holst-export` работал без сюрпризов, дай юзеру залогиниться заранее.
+- **Да** — выполни workflow из `integrations/time/commands/time-login.md`.
+- **Нет** — переходи к 4c.
 
-Скажи:
-> «Теперь Holst (доски, аналог Miro). Токен хранить не надо — просто залогинься в Chrome,
-> и сессия останется. Это нужно только если будешь пользоваться `/ai-hub:holst-export`.
-> Пропустить?»
+### 4c. Manual fallback
 
-Если юзер согласен настроить — через Chrome DevTools MCP `navigate_page` открой
-`https://app.holst.so/`. Скажи:
-> «Залогинься. Скажи "готово", когда будешь в рабочем пространстве.»
+Дай юзеру инструкцию:
 
-Ничего сохранять не надо — просто подтверди, что вкладка осталась залогиненной.
+> 1. Открой в браузере `$TIME_BASE_URL` (подставь актуальное значение).
+> 2. Залогинься через Google SSO.
+> 3. `F12` → **Application** → **Cookies** → найди `MMAUTHTOKEN` на домене Time.
+> 4. Скопируй значение (длинная строка) и пришли мне.
 
-### Step 6: Токен Kaiten (единственный ручной шаг)
+Когда юзер пришлёт:
 
-Kaiten API-токен придётся скопировать руками — это осознанное решение: токен даёт полный
-доступ к аккаунту, и пусть юзер сам увидит, где он лежит.
+```bash
+bash integrations/hub-meta/scripts/env-manager.sh set TIME_TOKEN "<token>"
+```
 
-Сначала проверь — может уже настроен:
+Провалидируй:
+
+```bash
+bash integrations/time/scripts/time-login.sh check
+```
+
+- `ok` → хорошо.
+- `error:*` → попроси повторить.
+
+## Step 5 — Holst login (опционально)
+
+Holst хранит сессию в самом браузере — отдельный токен не нужен.
+
+- **Есть Chrome DevTools MCP** — через `navigate_page` открой `https://app.holst.so/`, попроси юзера залогиниться и подтвердить «готово». Вкладка останется активной для будущих `/ai-hub:holst-export`.
+- **Нет MCP** — пропусти шаг. Скажи юзеру: «Holst потребует залогиниться при первом использовании `/ai-hub:holst-export`, настроить заранее без браузерного MCP нельзя». Это ОК, продолжай.
+
+## Step 6 — Kaiten token (всегда manual, MCP не помогает)
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh has KAITEN_TOKEN && echo set || echo missing
 ```
 
-Если `set` — скажи «Kaiten-токен уже есть, проверяю…» и быстро дёрни Kaiten API, например:
+Если `set` — провалидируй:
 
 ```bash
 source .env && curl -sS -o /dev/null -w "%{http_code}\n" \
-  -H "Authorization: Bearer $KAITEN_TOKEN" "https://$KAITEN_DOMAIN/api/latest/users/current"
+  -H "Authorization: Bearer $KAITEN_TOKEN" \
+  "https://$KAITEN_DOMAIN/api/latest/users/current"
 ```
 
-`200` — ок, пропусти шаг. Не `200` — попроси обновить токен.
+`200` → пропусти к Step 7. Иначе — попроси пересоздать.
 
-Если `missing` — скажи юзеру:
+Если `missing` — дай юзеру инструкцию (подставь актуальный `$KAITEN_DOMAIN`):
 
-> «Последний шаг — Kaiten-токен. Открой в браузере `https://<KAITEN_DOMAIN>/profile`
-> (я подставлю твой домен), потом → **Настройки профиля → API/Интеграции → Создать токен**.
-> Скопируй его и пришли мне сюда — я сохраню в `.env`, в контекст LLM токен не уйдёт.»
+> 1. Открой `https://$KAITEN_DOMAIN/profile`.
+> 2. **Настройки профиля → API/Интеграции → Создать токен**.
+> 3. Скопируй и пришли мне сюда.
 
-Подставь актуальный `$KAITEN_DOMAIN` в текст. Когда юзер пришлёт токен:
+Когда юзер пришлёт:
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh set KAITEN_TOKEN "<token>"
 ```
 
-**GENIE_TOKEN** (Databricks) — опционально, только если `GENIE_HOST` настроен. Скажи:
-> «Ещё есть Genie (аналитика по DWH) — опционально. Токен выдаёт админ данных. Настроить
-> сейчас или пропустить?»
+Провалидируй тем же curl-ом. Не `200` — попроси повторить.
 
-Если настраиваем — аналогично сохрани через `env-manager.sh set GENIE_TOKEN <token>`.
-
-### Step 7: team-config.json — ID досок, колонок, каналов
+## Step 7 — team-config.json
 
 ```bash
 test -f team-config.json && echo exists || echo missing
 ```
 
-Если `missing`:
+- `exists` → пропусти.
+- `missing` → ищи шаблон в порядке приоритета:
+  - `team-config.example.json` (standalone installation)
+  - `integrations/sagos95-ai-hub/team-config.example.json` (subtree installation в overlay-репо)
 
-1. Проверь шаблон: `test -f team-config.example.json` (или в subtree-префиксе, если хаб
-   подключён через subtree — например `integrations/sagos95-ai-hub/team-config.example.json`).
-   Если шаблон есть — `cp <example> team-config.json`.
+Если шаблон найден: `cp <example> team-config.json`. Спроси юзера:
 
-2. Скажи:
-   > «Создал `team-config.json` из шаблона. Там нужны ID вашей спринтовой доски,
-   > бизнес-бэклога, колонок и каналов Time. Можно:
-   > — заполнить вручную (открой файл и подставь ID), или
-   > — сейчас вместе: я задам вопросы и впишу значения сам. Как удобнее?»
+> «Создал `team-config.json` из шаблона. Заполнить сейчас вместе (я задам вопросы) или оставить заглушки — заполнишь руками позже?»
 
-3. Если «вместе» — через `AskUserQuestion` задавай по одному полю (space_id, board_id,
-   column IDs и т.д.). Для Kaiten-доски принимай URL — извлеки ID после `/board/`.
-   После каждого ответа — `jq` в `team-config.json`:
+**Если "вместе"** — через `AskUserQuestion` или текстом запроси по одному полю: `kaiten.space_id`, `kaiten.boards.sprint.id`, колонки, каналы Time. Для Kaiten-доски принимай URL и извлекай ID после `/board/`. Записывай через `jq`:
 
-   ```bash
-   tmp=$(mktemp)
-   jq '.kaiten.space_id = ($v | tonumber)' --arg v "$ANSWER" team-config.json > "$tmp" \
-     && mv "$tmp" team-config.json
-   ```
+```bash
+tmp=$(mktemp)
+jq '.kaiten.space_id = ($v | tonumber)' --arg v "$ANSWER" team-config.json > "$tmp" && mv "$tmp" team-config.json
+```
 
-   В конце покажи итог: `jq . team-config.json`.
+**Если "позже"** — назови путь и ключи, которые нужно заполнить.
 
-4. Если «вручную» — просто назови путь и список ключей.
-
-Если `exists` — ничего не делай, упомяни: «`team-config.json` уже есть, если нужно —
-отредактируй руками.»
-
-### Step 8: Финальная проверка + хэндофф
+## Step 8 — финальная проверка
 
 ```bash
 bash integrations/hub-meta/scripts/env-manager.sh check
 ```
 
-Покажи итог. Если остались `=missing` в optional — скажи, что это ок и настроить можно
-позже.
+- Все mandatory `=set` → **сейчас можно сказать "готово"**. Выведи 2-3 примера команд, которыми юзер может протестировать:
+  - `/ai-hub:time-chat read <channel>`
+  - `/ai-hub:buildin-read <url>`
+  - `/ai-hub:spike <kaiten-url>`
+- Остались `missing` в mandatory → НЕ говори "готово". Назови что осталось и предложи повторить соответствующий шаг.
+- `missing` только в optional (`GENIE_*`, `TIME_BOT_TOKEN`) → скажи «готово, опциональное можно настроить позже».
 
-Заверши позитивно:
+## Anti-patterns (что НЕ делать)
 
-> «Готово! Попробуй что-нибудь:
-> • `/ai-hub:time-chat read <channel>` — прочитать канал в Time
-> • `/ai-hub:buildin-read <url>` — открыть страницу Buildin
-> • `/ai-hub:spike <kaiten-url>` — полный spike по карточке
-> Если что-то сломается — запусти `/ai-hub:setup` ещё раз, он идемпотентный.»
-
-## Обработка ошибок
-
-- **Buildin login не прошёл** → предложи ручной fallback из `/ai-hub:buildin-login`
-  (скопировать JWT из DevTools Console). Если совсем никак — перейди на manual ввод
-  `KAITEN_DOMAIN` / `TIME_BASE_URL` в Step 3.
-- **Страница конфига пустая или 404** → извинись, перейди в manual-режим (Step 3 fallback).
-- **`env-manager.sh set` вернул ошибку** → покажи ошибку, предложи отредактировать `.env`
-  вручную.
-- **Kaiten токен не валиден (403/401)** → попроси пересоздать токен и повторить Step 6.
+- ❌ Остановиться после клона и сказать «репозиторий установлен, настрой `.env` руками». **Ты обязан пройти setup.**
+- ❌ Остановиться на Step 2/4 из-за отсутствия браузерного MCP. **Есть manual fallback — используй его.**
+- ❌ Пропустить Step 3 manual fallback, оставив `KAITEN_DOMAIN`/`TIME_BASE_URL` пустыми. **Без них ничего не работает — спроси юзера.**
+- ❌ Сообщать «дошёл до Step 7», если Steps 2–4 не выполнены. **Checklist линейный.**
+- ❌ Вставлять токен в сообщение пользователя или в логи. **Только через `env-manager.sh set` в `.env`.**
+- ❌ Начинать с Step 7 (`team-config.json`). **Это последний content-шаг, не первый.**

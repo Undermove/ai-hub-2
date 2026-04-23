@@ -33,6 +33,9 @@ integrations/time/.cache/
 # Buildin local cache
 integrations/buildin/.cache/
 
+# Setup state (per-install progress markers, no secrets)
+integrations/hub-meta/.setup-state
+
 # Node.js
 node_modules/
 
